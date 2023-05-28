@@ -276,17 +276,17 @@ const struct opcode opcodes[256] = {
 };
 
 void opcode_execute(struct cpu *cpu) {
-    uint8_t opcode = memory_read_byte(cpu, cpu->reg.ip32);
+    uint8_t opcode_byte = memory_read_byte(cpu, cpu->reg.ip32);
+    struct opcode opcode = opcodes[opcode_byte];
 
-    // if (opcodes[opcode].function == NULL) {
-    //    printf("INVALID INSTRUCTION BAILING OUT\n");
-    //    cpu->state |= CPU_HALTED;
-    // }
-    // else {
-        printf("%s\n", opcodes[opcode].name);
-    // }
+    if (/* opcode.function == NULL */ 0) {
+        printf("[!] Not implemented or invalid instruction %#x (%s) hit, bailing out.\n", opcode_byte, opcode.name);
+        cpu->state |= CPU_HALTED;
+    } else {
+        printf("%s\nIP: %#x    CS: %#x\nIP32: %#x\n--------\n", opcode.name, cpu->reg.ip, cpu->reg.cs, cpu->reg.ip32);
+    }
 
-    cpu->reg.ip++;
+    cpu->reg.ip += opcode.operand_length + 1;
     // PhysicalAddress = Segment * 16 + Offset
     cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
 }

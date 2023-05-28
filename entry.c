@@ -22,8 +22,5 @@ int main(void) {
 
     memcpy(cpu.memory, code, sizeof(code) - 1);
 
-    cpu_run(&cpu, sizeof(code) - 1);
-
-
-    return 0;
+    return cpu_run(&cpu, sizeof(code) - 1);
 }
