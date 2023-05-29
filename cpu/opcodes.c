@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 
+#define debug_print printf
+
 /*
     addr8 = 8-bit address of I/O port
     reg8 = AL = 0, CL = 1, DL = 2, BL = 3, AH =4, CH = 5, DH = 6, BH = 7
@@ -16,67 +18,558 @@
     imm16 = 16 bit immediate
  */
 
+static inline uint16_t opcode_get_segment_register(struct cpu *cpu, uint8_t reg_id) {
+    switch (reg_id) {
+        case 0: return cpu->reg.es;
+        case 1: return cpu->reg.cs;
+        case 2: return cpu->reg.ss;
+        case 3: return cpu->reg.ds;
+        case 4:
+        case 5:
+        case 6:
+        case 7: return cpu->reg.es;
+        default: return -1;
+    }
+}
+
+static inline uint8_t opcode_get_byte_register(struct cpu *cpu, uint8_t reg_id)  {
+    switch (reg_id) {
+        case 0: return cpu->reg.ax[0];
+        case 1: return cpu->reg.cx[0];
+        case 2: return cpu->reg.dx[0];
+        case 3: return cpu->reg.bx[0];
+        case 4: return cpu->reg.ax[1];
+        case 5: return cpu->reg.cx[1];
+        case 6: return cpu->reg.dx[1];
+        case 7: return cpu->reg.bx[1];
+        default: return -1;
+    }
+}
+
+static inline uint16_t opcode_get_word_register(struct cpu *cpu, uint8_t reg_id)  {
+    switch (reg_id) {
+        case 0: return opcode_reg8_to_reg16(cpu->reg.ax);
+        case 1: return opcode_reg8_to_reg16(cpu->reg.cx);
+        case 2: return opcode_reg8_to_reg16(cpu->reg.dx);
+        case 3: return opcode_reg8_to_reg16(cpu->reg.bx);
+        case 4: return cpu->reg.sp;
+        case 5: return cpu->reg.bp;
+        case 6: return cpu->reg.si;
+        case 7: return cpu->reg.di;
+        default: return -1;
+    }
+}
+
+static inline void opcode_set_segment_register(struct cpu *cpu, uint8_t reg_id, uint16_t val) {
+    switch (reg_id) {
+        case 0: cpu->reg.es = val; return;
+        case 1: cpu->reg.cs = val; return;
+        case 2: cpu->reg.ss = val; return;
+        case 3: cpu->reg.ds = val; return;
+        case 4:
+        case 5:
+        case 6:
+        case 7: cpu->reg.es = val; return;
+        default: return;
+    }
+}
+
+static inline void opcode_set_byte_register(struct cpu *cpu, uint8_t reg_id, uint8_t val)  {
+    switch (reg_id) {
+        case 0: cpu->reg.ax[0] = val; return;
+        case 1: cpu->reg.cx[0] = val; return;
+        case 2: cpu->reg.dx[0] = val; return;
+        case 3: cpu->reg.bx[0] = val; return;
+        case 4: cpu->reg.ax[1] = val; return;
+        case 5: cpu->reg.cx[1] = val; return;
+        case 6: cpu->reg.dx[1] = val; return;
+        case 7: cpu->reg.bx[1] = val; return;
+        default: return;
+    }
+}
+
+static inline void opcode_set_word_register(struct cpu *cpu, uint8_t reg_id, uint16_t val)  {
+    switch (reg_id) {
+        case 0: opcode_set_reg16_val(cpu->reg.ax, val); return;
+        case 1: opcode_set_reg16_val(cpu->reg.cx, val); return;
+        case 2: opcode_set_reg16_val(cpu->reg.dx, val); return;
+        case 3: opcode_set_reg16_val(cpu->reg.bx, val); return;
+        case 4: cpu->reg.sp = val; return;
+        case 5: cpu->reg.bp = val; return;
+        case 6: cpu->reg.si = val; return;
+        case 7: cpu->reg.di = val; return;
+        default: return;
+    }
+}
+
+static inline uint8_t opcode_get_byte_registers_offset(struct cpu *cpu, uint8_t reg_id, uint16_t nex_op) {
+    switch (reg_id) {
+        case 0: return memory_read_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.si + nex_op);
+        case 1: return memory_read_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.di + nex_op);
+        case 2: return memory_read_byte(cpu, cpu->reg.bp + cpu->reg.si + nex_op);
+        case 3: return memory_read_byte(cpu, cpu->reg.bp + cpu->reg.di + nex_op);
+        case 4: return memory_read_byte(cpu, cpu->reg.si + nex_op);
+        case 5: return memory_read_byte(cpu, cpu->reg.bp + nex_op);
+        case 6: return memory_read_byte(cpu, cpu->reg.di + nex_op);
+        case 7: return memory_read_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + nex_op);
+        default: return -1;
+    }
+}
+
+static inline uint8_t opcode_get_byte_registers(struct cpu *cpu, uint8_t reg_id) {
+    switch (reg_id) {
+        case 0: return memory_read_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.si);
+        case 1: return memory_read_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.di);
+        case 2: return memory_read_byte(cpu, cpu->reg.bp + cpu->reg.si);
+        case 3: return memory_read_byte(cpu, cpu->reg.bp + cpu->reg.di);
+        case 4: return memory_read_byte(cpu, cpu->reg.si);
+        case 5: return memory_read_byte(cpu, cpu->reg.bp);
+        case 6: return memory_read_byte(cpu, cpu->reg.di);
+        case 7: return memory_read_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx));
+        default: return -1;
+    }
+}
+
+static inline void opcode_set_byte_registers_offset(struct cpu *cpu, uint8_t reg_id, uint16_t nex_op, uint8_t byte) {
+    switch (reg_id) {
+        case 0: return memory_write_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.si + nex_op, byte);
+        case 1: return memory_write_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.di + nex_op, byte);
+        case 2: return memory_write_byte(cpu, cpu->reg.bp + cpu->reg.si + nex_op, byte);
+        case 3: return memory_write_byte(cpu, cpu->reg.bp + cpu->reg.di + nex_op, byte);
+        case 4: return memory_write_byte(cpu, cpu->reg.si + nex_op, byte);
+        case 5: return memory_write_byte(cpu, cpu->reg.bp + nex_op, byte);
+        case 6: return memory_write_byte(cpu, cpu->reg.di + nex_op, byte);
+        case 7: return memory_write_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + nex_op, byte);
+        default: return;
+    }
+}
+
+static inline void opcode_set_byte_registers(struct cpu *cpu, uint8_t reg_id, uint8_t byte) {
+    switch (reg_id) {
+        case 0: return memory_write_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.si, byte);
+        case 1: return memory_write_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.di, byte);
+        case 2: return memory_write_byte(cpu, cpu->reg.bp + cpu->reg.si, byte);
+        case 3: return memory_write_byte(cpu, cpu->reg.bp + cpu->reg.di, byte);
+        case 4: return memory_write_byte(cpu, cpu->reg.si, byte);
+        case 5: return memory_write_byte(cpu, cpu->reg.bp, byte);
+        case 6: return memory_write_byte(cpu, cpu->reg.di, byte);
+        case 7: return memory_write_byte(cpu, opcode_reg8_to_reg16(cpu->reg.bx), byte);
+        default: return;
+    }
+}
+
+static inline uint16_t opcode_get_word_registers_offset(struct cpu *cpu, uint8_t reg_id, uint16_t nex_op) {
+    switch (reg_id) {
+        case 0: return memory_read_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.si + nex_op);
+        case 1: return memory_read_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.di + nex_op);
+        case 2: return memory_read_word(cpu, cpu->reg.bp + cpu->reg.si + nex_op);
+        case 3: return memory_read_word(cpu, cpu->reg.bp + cpu->reg.di + nex_op);
+        case 4: return memory_read_word(cpu, cpu->reg.si + nex_op);
+        case 5: return memory_read_word(cpu, cpu->reg.bp + nex_op);
+        case 6: return memory_read_word(cpu, cpu->reg.di + nex_op);
+        case 7: return memory_read_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + nex_op);
+        default: return -1;
+    }
+}
+
+static inline uint16_t opcode_get_word_registers(struct cpu *cpu, uint8_t reg_id) {
+    switch (reg_id) {
+        case 0: return memory_read_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.si);
+        case 1: return memory_read_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.di);
+        case 2: return memory_read_word(cpu, cpu->reg.bp + cpu->reg.si);
+        case 3: return memory_read_word(cpu, cpu->reg.bp + cpu->reg.di);
+        case 4: return memory_read_word(cpu, cpu->reg.si);
+        case 5: return memory_read_word(cpu, cpu->reg.bp);
+        case 6: return memory_read_word(cpu, cpu->reg.di);
+        case 7: return memory_read_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx));
+        default: return -1;
+    }
+}
+
+static inline void opcode_set_word_registers_offset(struct cpu *cpu, uint8_t reg_id, uint16_t nex_op, uint16_t word) {
+    switch (reg_id) {
+        case 0: return memory_write_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.si + nex_op, word);
+        case 1: return memory_write_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.di + nex_op, word);
+        case 2: return memory_write_word(cpu, cpu->reg.bp + cpu->reg.si + nex_op, word);
+        case 3: return memory_write_word(cpu, cpu->reg.bp + cpu->reg.di + nex_op, word);
+        case 4: return memory_write_word(cpu, cpu->reg.si + nex_op, word);
+        case 5: return memory_write_word(cpu, cpu->reg.bp + nex_op, word);
+        case 6: return memory_write_word(cpu, cpu->reg.di + nex_op, word);
+        case 7: return memory_write_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + nex_op, word);
+        default: return;
+    }
+}
+
+static inline void opcode_set_word_registers(struct cpu *cpu, uint8_t reg_id, uint16_t word) {
+    switch (reg_id) {
+        case 0: return memory_write_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.si, word);
+        case 1: return memory_write_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx) + cpu->reg.di, word);
+        case 2: return memory_write_word(cpu, cpu->reg.bp + cpu->reg.si, word);
+        case 3: return memory_write_word(cpu, cpu->reg.bp + cpu->reg.di, word);
+        case 4: return memory_write_word(cpu, cpu->reg.si, word);
+        case 5: return memory_write_word(cpu, cpu->reg.bp, word);
+        case 6: return memory_write_word(cpu, cpu->reg.di, word);
+        case 7: return memory_write_word(cpu, opcode_reg8_to_reg16(cpu->reg.bx), word);
+        default: return;
+    }
+}
+
+static inline uint8_t opcode_decode_mod_rm8l_and_read(struct cpu *cpu, uint8_t reg_id) {
+    uint8_t nex_op = 0, nex_op1 = 0;
+    switch (reg_id >> 6) {
+        case 0b11:
+            return opcode_get_byte_register(cpu, reg_id & ((1 << 3) - 1));
+        case 0b10:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op1 = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_get_byte_registers_offset(cpu, reg_id & ((1 << 3) - 1), ((nex_op1 << 8) & (nex_op & 0xff)));
+        case 0b01:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_get_byte_registers_offset(cpu, reg_id & ((1 << 3) - 1), nex_op);
+        case 0b00:
+            return opcode_get_byte_registers(cpu, reg_id & ((1 << 3) - 1));
+        default:
+            return -1;
+    }
+}
+
+static inline uint8_t opcode_decode_mod_rm8h_and_read(struct cpu *cpu, uint8_t reg_id) {
+    uint8_t nex_op = 0, nex_op1 = 0;
+    switch (reg_id >> 6) {
+        case 0b11:
+            return opcode_get_byte_register(cpu, ((reg_id & 0b00111000) >> 3));
+        case 0b10:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op1 = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_get_byte_registers_offset(cpu, ((reg_id & 0b00111000) >> 3), ((nex_op1 << 8) & (nex_op & 0xff)));
+        case 0b01:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_get_byte_registers_offset(cpu, ((reg_id & 0b00111000) >> 3), nex_op);
+        case 0b00:
+            return opcode_get_byte_registers(cpu, ((reg_id & 0b00111000) >> 3));
+        default:
+            return -1;
+    }
+}
+
+static inline void opcode_decode_mod_rm8l_and_write(struct cpu *cpu, uint8_t reg_id, uint8_t val) {
+    uint8_t nex_op = 0, nex_op1 = 0;
+    switch (reg_id >> 6) {
+        case 0b11:
+            return opcode_set_byte_register(cpu, reg_id & ((1 << 3) - 1), val);
+        case 0b10:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op1 = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_set_byte_registers_offset(cpu, reg_id & ((1 << 3) - 1), ((nex_op1 << 8) & (nex_op & 0xff)), val);
+        case 0b01:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_set_byte_registers_offset(cpu, reg_id & ((1 << 3) - 1), nex_op, val);
+        case 0b00:
+            return opcode_set_byte_registers(cpu, reg_id & ((1 << 3) - 1), val);
+        default:
+            return;
+    }
+}
+
+static inline void opcode_decode_mod_rm8h_and_write(struct cpu *cpu, uint8_t reg_id, uint8_t val) {
+    uint8_t nex_op = 0, nex_op1 = 0;
+    switch (reg_id >> 6) {
+        case 0b11:
+            return opcode_set_byte_register(cpu, ((reg_id & 0b00111000) >> 3), val);
+        case 0b10:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op1 = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_set_byte_registers_offset(cpu, ((reg_id & 0b00111000) >> 3), ((nex_op1 << 8) & (nex_op & 0xff)), val);
+        case 0b01:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_set_byte_registers_offset(cpu, ((reg_id & 0b00111000) >> 3), nex_op, val);
+        case 0b00:
+            return opcode_set_byte_registers(cpu, ((reg_id & 0b00111000) >> 3), val);
+        default:
+            return;
+    }
+}
+
+static inline uint16_t opcode_decode_mod_rm16l_and_read(struct cpu *cpu, uint8_t reg_id) {
+    uint8_t nex_op = 0, nex_op1 = 0;
+    switch (reg_id >> 6) {
+        case 0b11:
+            return opcode_get_word_register(cpu, reg_id & ((1 << 3) - 1));
+        case 0b10:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op1 = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_get_word_registers_offset(cpu, reg_id & ((1 << 3) - 1), ((nex_op1 << 8) & (nex_op & 0xff)));
+        case 0b01:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_get_word_registers_offset(cpu, reg_id & ((1 << 3) - 1), nex_op);
+        case 0b00:
+            return opcode_get_word_registers(cpu, reg_id & ((1 << 3) - 1));
+        default:
+            return -1;
+    }
+}
+
+static inline uint16_t opcode_decode_mod_rm16h_and_read(struct cpu *cpu, uint8_t reg_id) {
+    uint8_t nex_op = 0, nex_op1 = 0;
+    switch (reg_id >> 6) {
+        case 0b11:
+            return opcode_get_word_register(cpu, ((reg_id & 0b00111000) >> 3));
+        case 0b10:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op1 = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_get_word_registers_offset(cpu, ((reg_id & 0b00111000) >> 3), ((nex_op1 << 8) & (nex_op & 0xff)));
+        case 0b01:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_get_word_registers_offset(cpu, ((reg_id & 0b00111000) >> 3), nex_op);
+        case 0b00:
+            return opcode_get_word_registers(cpu, ((reg_id & 0b00111000) >> 3));
+        default:
+            return -1;
+    }
+}
+
+static inline void opcode_decode_mod_rm16l_and_write(struct cpu *cpu, uint8_t reg_id, uint16_t val) {
+    uint8_t nex_op = 0, nex_op1 = 0;
+    switch (reg_id >> 6) {
+        case 0b11:
+            return opcode_set_word_register(cpu, reg_id & ((1 << 3) - 1), val);
+        case 0b10:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op1 = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_set_word_registers_offset(cpu, reg_id & ((1 << 3) - 1), ((nex_op1 << 8) & (nex_op & 0xff)), val);
+        case 0b01:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_set_word_registers_offset(cpu, reg_id & ((1 << 3) - 1), nex_op, val);
+        case 0b00:
+            return opcode_set_word_registers(cpu, reg_id & ((1 << 3) - 1), val);
+        default:
+            return;
+    }
+}
+
+static inline void opcode_decode_mod_rm16h_and_write(struct cpu *cpu, uint8_t reg_id, uint8_t val) {
+    uint8_t nex_op = 0, nex_op1 = 0;
+    switch (reg_id >> 6) {
+        case 0b11:
+            return opcode_set_byte_register(cpu, ((reg_id & 0b00111000) >> 3), val);
+        case 0b10:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op1 = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_set_byte_registers_offset(cpu, ((reg_id & 0b00111000) >> 3), ((nex_op1 << 8) & (nex_op & 0xff)), val);
+        case 0b01:
+            cpu->reg.ip++;
+            cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+            nex_op = memory_read_byte(cpu, cpu->reg.ip32);
+            return opcode_set_byte_registers_offset(cpu, ((reg_id & 0b00111000) >> 3), nex_op, val);
+        case 0b00:
+            return opcode_set_byte_registers(cpu, ((reg_id & 0b00111000) >> 3), val);
+        default:
+            return;
+    }
+}
+
+static void opcode_hlt(struct cpu *cpu) {
+    cpu->state |= CPU_HALTED;
+    debug_print("[*] Halting the CPU\n");
+}
+
+static void opcode_xorrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = a ^ b;
+    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    opcode_decode_mod_rm8l_and_write(cpu, op0, result);
+}
+
+static void opcode_xorrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = a ^ b;
+    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    opcode_decode_mod_rm16l_and_write(cpu, op0, result);
+}
+
+static void opcode_andrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = a & b;
+    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    opcode_decode_mod_rm8l_and_write(cpu, op0, result);
+}
+
+static void opcode_andrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = a & b;
+    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    opcode_decode_mod_rm16l_and_write(cpu, op0, result);
+}
+
+static void opcode_orrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = a | b;
+    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    opcode_decode_mod_rm8l_and_write(cpu, op0, result);
+}
+
+static void opcode_orrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = a | b;
+    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    opcode_decode_mod_rm16l_and_write(cpu, op0, result);
+}
+
+static void opcode_addrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint16_t result = a + b;
+    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    if (result > 255) { opcode_decode_mod_rm16l_and_write(cpu, op0, (uint8_t)result); cpu->reg.flags |= CPU_FLAGS_ACARRY; }
+    else opcode_decode_mod_rm8l_and_write(cpu, op0, result); cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+}
+
+static void opcode_addrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint32_t result = a + b;
+    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    if (result > 65535) { opcode_decode_mod_rm16l_and_write(cpu, op0, 0); cpu->reg.flags |= CPU_FLAGS_OVERFLOW; }
+    else opcode_decode_mod_rm16l_and_write(cpu, op0, (uint16_t)result); cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+}
+
 const struct opcode opcodes[256] = {
-        {"ADD r/m8, r8", 2, NULL},
-        {"ADD r/m16, r16", 3, NULL},
+        {"ADD r/m8, r8", 2, opcode_addrm8},
+        {"ADD r/m16, r16", 2, opcode_addrm16},
         {"ADD r8, r/m8", 2, NULL},
-        {"ADD r16, r/m16", 3, NULL},
+        {"ADD r16, r/m16", 2, NULL},
         {"ADD al, imm8", 1, NULL},
-        {"ADD ax, imm16", 3, NULL},
+        {"ADD ax, imm16", 2, NULL},
         {"PUSH es", 0, NULL},
         {"POP es", 0, NULL},
-        {"OR r/m8, r8", 2, NULL},
-        {"OR r/m16, r16", 3, NULL},
+        {"OR r/m8, r8", 2, opcode_orrm8},
+        {"OR r/m16, r16", 2, opcode_orrm16},
         {"OR r8, r/m8", 2, NULL},
-        {"OR r16, r/m16", 3, NULL},
+        {"OR r16, r/m16", 2, NULL},
         {"OR al, imm8", 1, NULL},
-        {"OR ax, imm16", 3, NULL},
+        {"OR ax, imm16", 2, NULL},
         {"PUSH cs", 0, NULL},
         {"POP cs", 0, NULL},
         {"ADC r/m8, r8", 2, NULL},
-        {"ADC r/m16, r16", 3, NULL},
+        {"ADC r/m16, r16", 2, NULL},
         {"ADC r8, r/m8", 2, NULL},
-        {"ADC r16, r/m16", 3, NULL},
+        {"ADC r16, r/m16", 2, NULL},
         {"ADC al, imm8", 1, NULL},
         {"ADC ax, imm16", 2, NULL},
         {"PUSH ss", 0, NULL},
         {"POP ss", 0, NULL},
         {"SBB r/m8, r8", 2, NULL},
-        {"SBB r/m16, r16", 3, NULL},
+        {"SBB r/m16, r16", 2, NULL},
         {"SBB r8, r/m8", 2, NULL},
-        {"SBB r16, r/m16", 3, NULL},
+        {"SBB r16, r/m16", 2, NULL},
         {"SBB al, imm8", 1, NULL},
         {"SBB ax, imm8", 1, NULL},
         {"PUSH ds", 0, NULL},
         {"POP ds", 0, NULL},
-        {"AND r/m8, r8", 2, NULL},
-        {"AND r/m16, r16", 3, NULL},
+        {"AND r/m8, r8", 2, opcode_andrm8},
+        {"AND r/m16, r16", 2, opcode_andrm16},
         {"AND r8, r/m8", 2, NULL},
-        {"AND r16, r/m16", 3, NULL},
+        {"AND r16, r/m16", 2, NULL},
         {"AND al, imm8", 1, NULL},
         {"AND ax, imm16", 2, NULL},
         {"DAA", 0, NULL},
         {"SUB r/m8, r8", 2, NULL},
-        {"SUB r/m16, r16", 3, NULL},
+        {"SUB r/m16, r16", 2, NULL},
         {"SUB r8, r/m8", 2, NULL},
-        {"SUB r16, r/m16", 3, NULL},
+        {"SUB r16, r/m16", 2, NULL},
         {"SUB al, imm8", 1, NULL},
         {"SUB ax, imm16", 2, NULL},
         {"", 0, NULL},
+        {"", 0, NULL},
         {"DAS", 0, NULL},
-        {"XOR r/m8, r8", 2, NULL},
-        {"XOR r/m16, r16", 3, NULL},
+        {"XOR r/m8, r8", 2, opcode_xorrm8},
+        {"XOR r/m16, r16", 2, opcode_xorrm16},
         {"XOR r8, r/m8", 2, NULL},
-        {"XOR r16, r/m16", 3, NULL},
+        {"XOR r16, r/m16", 2, NULL},
         {"XOR al, imm8", 1, NULL},
         {"XOR ax, imm16", 2, NULL},
         {"", 0, NULL},
-        {"", 0, NULL},
         {"AAA", 0, NULL},
         {"CMP r/m8, r8", 2, NULL},
-        {"CMP r/m16, r16", 3, NULL},
+        {"CMP r/m16, r16", 2, NULL},
         {"CMP r8, r/m8", 2, NULL},
-        {"CMP r16, r/m16", 3, NULL},
+        {"CMP r16, r/m16", 2, NULL},
         {"CMP al, imm8", 1, NULL},
         {"CMP ax, imm16", 2, NULL},
         {"", 0, NULL},
@@ -261,7 +754,7 @@ const struct opcode opcodes[256] = {
         {"", 0, NULL},
         {"", 0, NULL},
         {"", 0, NULL},
-        {"HLT", 0, NULL},
+        {"HLT", 0, opcode_hlt},
         {"CMC", 0, NULL},
         {"GRP3a r/m8", 1, NULL},
         {"GRP3b r/m16", 1, NULL},
@@ -279,11 +772,40 @@ void opcode_execute(struct cpu *cpu) {
     uint8_t opcode_byte = memory_read_byte(cpu, cpu->reg.ip32);
     struct opcode opcode = opcodes[opcode_byte];
 
-    if (/* opcode.function == NULL */ 0) {
-        printf("[!] Not implemented or invalid instruction %#x (%s) hit, bailing out.\n", opcode_byte, opcode.name);
+    if (opcode.function == NULL) {
+        debug_print("[!] Not implemented or invalid instruction %#x (%s) hit, bailing out.\n", opcode_byte, opcode.name);
         cpu->state |= CPU_HALTED;
     } else {
-        printf("%s\nIP: %#x    CS: %#x\nIP32: %#x\n--------\n", opcode.name, cpu->reg.ip, cpu->reg.cs, cpu->reg.ip32);
+        uint8_t op0, op1, op2, op3;
+        printf("[*] %s\n", opcode.name);
+        switch (opcode.operand_length) {
+            case 0:
+                ((void (*)(struct cpu *cpu))opcode.function)(cpu);
+                break;
+            case 1:
+                op0 = memory_read_byte(cpu, cpu->reg.ip32 + 1);
+                ((void (*)(struct cpu *cpu, uint8_t))opcode.function)(cpu, op0);
+            case 2:
+                op0 = memory_read_byte(cpu, cpu->reg.ip32 + 1);
+                op1 = memory_read_byte(cpu, cpu->reg.ip32 + 2);
+                ((void (*)(struct cpu *cpu, uint8_t, uint8_t))opcode.function)(cpu, op0, op1);
+                break;
+            case 3:
+                op0 = memory_read_byte(cpu, cpu->reg.ip32 + 1);
+                op1 = memory_read_byte(cpu, cpu->reg.ip32 + 2);
+                op2 = memory_read_byte(cpu, cpu->reg.ip32 + 3);
+                ((void (*)(struct cpu *cpu, uint8_t, uint8_t, uint8_t))opcode.function)(cpu, op0, op1, op2);
+                break;
+            case 4:
+                op0 = memory_read_byte(cpu, cpu->reg.ip32 + 1);
+                op1 = memory_read_byte(cpu, cpu->reg.ip32 + 2);
+                op2 = memory_read_byte(cpu, cpu->reg.ip32 + 3);
+                op3 = memory_read_byte(cpu, cpu->reg.ip32 + 4);
+                ((void (*)(struct cpu *cpu, uint8_t, uint8_t, uint8_t, uint8_t))opcode.function)(cpu, op0, op1, op2, op3);
+                break;
+            default:
+                return;
+        }
     }
 
     if (opcode.operand_length) cpu->reg.ip += opcode.operand_length;

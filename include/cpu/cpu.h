@@ -28,6 +28,17 @@ struct cpu_registers {
 
 #define CPU_HALTED (1 << 0)
 
+#define CPU_FLAGS_CARRY (1 << 0)
+#define CPU_FLAGS_PARITY (1 << 2)
+#define CPU_FLAGS_ACARRY (1 << 4)
+#define CPU_FLAGS_ZERO (1 << 6)
+#define CPU_FLAGS_SIGN (1 << 7)
+#define CPU_FLAGS_OVERFLOW (1 << 11)
+
+#define CPU_FLAGS_INTERRUPTS (1 << 9)
+#define CPU_FLAGS_DIRECTION (1 << 10)
+#define CPU_FLAGS_DEBUG_BREAK (1 << 8)
+
 struct cpu {
     uint8_t *memory;
     size_t memory_size;
