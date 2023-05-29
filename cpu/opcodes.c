@@ -5,18 +5,18 @@
 
 #define debug_print printf
 
-/*
-    addr8 = 8-bit address of I/O port
-    reg8 = AL = 0, CL = 1, DL = 2, BL = 3, AH =4, CH = 5, DH = 6, BH = 7
-    reg16 = AX = 0, CX =1, DX =2, BX =3, SP = 4, BP = 5, SI = 6, DI = 7
-    sreg = ES = 0, CS = 1, SS = 2, DS = 3
-    mem8 = memory byte (direct addressing only)
-    mem16 = memory word (direct addressing only)
-    r/m8 = reg8 or mem8
-    r/m16 = reg16 or mem16
-    imm8 = 8 bit immediate
-    imm16 = 16 bit immediate
- */
+static const uint8_t parity_table[0x100] = {
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+        0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+        1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1};
 
 static inline uint16_t opcode_get_segment_register(struct cpu *cpu, uint8_t reg_id) {
     switch (reg_id) {
@@ -414,6 +414,64 @@ static inline void opcode_decode_mod_rm16h_and_write(struct cpu *cpu, uint8_t re
     }
 }
 
+static inline void opcode_push(struct cpu *cpu, uint16_t val) {
+    memory_write_word(cpu, cpu->reg.ss * 16 + cpu->reg.sp, val);
+    cpu->reg.sp -= 2;
+}
+
+static inline uint16_t opcode_pop(struct cpu *cpu) {
+    cpu->reg.sp += 2;
+    uint16_t t = memory_read_word(cpu, cpu->reg.ss * 16 + cpu->reg.sp);
+    return t;
+}
+
+static inline void opcode_set_flags_based_on_result(struct cpu *cpu, uint16_t val) {
+    if (!val) cpu->reg.flags |= CPU_FLAGS_ZERO;
+    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+
+    if (val & 0x8000) { cpu->reg.flags |= CPU_FLAGS_SIGN; }
+    else { cpu->reg.flags &= ~(CPU_FLAGS_SIGN); }
+
+    if (parity_table[val & 0xff]) { cpu->reg.flags |= CPU_FLAGS_PARITY; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_PARITY);
+}
+
+static inline uint16_t opcode_add(struct cpu *cpu, uint16_t a, uint16_t b) {
+    uint32_t res = a + b;
+
+    opcode_set_flags_based_on_result(cpu, res);
+
+    if (res & 0xFFFF0000) { cpu->reg.flags |= CPU_FLAGS_CARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_CARRY);
+
+    if (((res ^ a) & (res ^ b) & 0x8000) == 0x8000) { cpu->reg.flags |= CPU_FLAGS_OVERFLOW ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+
+    if (((a ^ b ^ res) & 0x10) == 0x10) { cpu->reg.flags |= CPU_FLAGS_ACARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    return res;
+}
+
+static inline uint16_t opcode_sub(struct cpu *cpu, uint16_t a, uint16_t b) {
+    uint32_t res = a - b;
+
+    opcode_set_flags_based_on_result(cpu, res);
+
+    if (res & 0xFFFF0000) { cpu->reg.flags |= CPU_FLAGS_CARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_CARRY);
+
+    if (((res ^ a) & (a ^ b) & 0x8000) == 0x8000) { cpu->reg.flags |= CPU_FLAGS_OVERFLOW ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+
+    if (((a ^ b ^ res) & 0x10) == 0x10) { cpu->reg.flags |= CPU_FLAGS_ACARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    return res;
+}
+
+// START OF OPCODE IMPLEMENTATIONS
+
 static void opcode_hlt(struct cpu *cpu) {
     cpu->state |= CPU_HALTED;
     debug_print("[*] Halting the CPU\n");
@@ -424,8 +482,7 @@ static void opcode_xorrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
 
     uint8_t result = a ^ b;
-    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
-    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+    opcode_set_flags_based_on_result(cpu, result);
 
     opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
@@ -435,8 +492,7 @@ static void opcode_xorrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
 
     uint16_t result = a ^ b;
-    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
-    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+    opcode_set_flags_based_on_result(cpu, result);
 
     opcode_decode_mod_rm16l_and_write(cpu, op0, result);
 }
@@ -446,8 +502,7 @@ static void opcode_andrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
 
     uint8_t result = a & b;
-    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
-    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+    opcode_set_flags_based_on_result(cpu, result);
 
     opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
@@ -457,8 +512,7 @@ static void opcode_andrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
 
     uint16_t result = a & b;
-    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
-    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+    opcode_set_flags_based_on_result(cpu, result);
 
     opcode_decode_mod_rm16l_and_write(cpu, op0, result);
 }
@@ -468,8 +522,7 @@ static void opcode_orrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
 
     uint8_t result = a | b;
-    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
-    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+    opcode_set_flags_based_on_result(cpu, result);
 
     opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
@@ -479,8 +532,7 @@ static void opcode_orrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
 
     uint16_t result = a | b;
-    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
-    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+    opcode_set_flags_based_on_result(cpu, result);
 
     opcode_decode_mod_rm16l_and_write(cpu, op0, result);
 }
@@ -489,25 +541,175 @@ static void opcode_addrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
     uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
 
-    uint16_t result = a + b;
-    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
-    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+    uint16_t result = opcode_add(cpu, a, b);
 
-    if (result > 255) { opcode_decode_mod_rm16l_and_write(cpu, op0, (uint8_t)result); cpu->reg.flags |= CPU_FLAGS_ACARRY; }
-    else opcode_decode_mod_rm8l_and_write(cpu, op0, result); cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+    opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
 
 static void opcode_addrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
     uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
 
-    uint32_t result = a + b;
-    if (!result) cpu->reg.flags |= CPU_FLAGS_ZERO;
-    else cpu->reg.flags &= ~(CPU_FLAGS_ZERO);
+    uint16_t result = opcode_add(cpu, a, b);
 
-    if (result > 65535) { opcode_decode_mod_rm16l_and_write(cpu, op0, 0); cpu->reg.flags |= CPU_FLAGS_OVERFLOW; }
-    else opcode_decode_mod_rm16l_and_write(cpu, op0, (uint16_t)result); cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
+
+static void opcode_pushax(struct cpu *cpu) {
+    opcode_push(cpu,opcode_reg8_to_reg16(cpu->reg.ax));
+}
+
+static void opcode_pushcx(struct cpu *cpu) {
+    opcode_push(cpu,opcode_reg8_to_reg16(cpu->reg.cx));
+}
+static void opcode_pushdx(struct cpu *cpu) {
+    opcode_push(cpu,opcode_reg8_to_reg16(cpu->reg.dx));
+}
+static void opcode_pushbx(struct cpu *cpu) {
+    opcode_push(cpu,opcode_reg8_to_reg16(cpu->reg.bx));
+}
+
+static void opcode_pushsp(struct cpu *cpu) {
+    opcode_push(cpu,cpu->reg.sp);
+}
+
+static void opcode_pushbp(struct cpu *cpu) {
+    opcode_push(cpu,cpu->reg.bp);
+}
+static void opcode_pushsi(struct cpu *cpu) {
+    opcode_push(cpu,cpu->reg.si);
+}
+static void opcode_pushdi(struct cpu *cpu) {
+    opcode_push(cpu,cpu->reg.di);
+}
+
+static void opcode_popax(struct cpu *cpu) {
+    uint16_t t =  opcode_pop(cpu);
+    opcode_set_reg16_val(cpu->reg.ax, t);
+}
+
+static void opcode_popcx(struct cpu *cpu) {
+    uint16_t t =  opcode_pop(cpu);
+    opcode_set_reg16_val(cpu->reg.cx, t);
+}
+static void opcode_popdx(struct cpu *cpu) {
+    uint16_t t =  opcode_pop(cpu);
+    opcode_set_reg16_val(cpu->reg.dx, t);
+}
+static void opcode_popbx(struct cpu *cpu) {
+    uint16_t t =  opcode_pop(cpu);
+    opcode_set_reg16_val(cpu->reg.bx, t);
+}
+
+static void opcode_popsp(struct cpu *cpu) {
+    cpu->reg.sp = opcode_pop(cpu);
+}
+
+static void opcode_popbp(struct cpu *cpu) {
+    cpu->reg.bp = opcode_pop(cpu);
+}
+static void opcode_popsi(struct cpu *cpu) {
+    cpu->reg.si = opcode_pop(cpu);
+}
+static void opcode_popdi(struct cpu *cpu) {
+    cpu->reg.di = opcode_pop(cpu);
+}
+
+static void opcode_incax(struct cpu *cpu) {
+    uint16_t res = opcode_add(cpu, opcode_reg8_to_reg16(cpu->reg.ax), 1);
+    opcode_set_reg16_val(cpu->reg.ax, res);
+}
+
+static void opcode_inccx(struct cpu *cpu) {
+    uint16_t res = opcode_add(cpu, opcode_reg8_to_reg16(cpu->reg.cx), 1);
+    opcode_set_reg16_val(cpu->reg.cx, res);
+}
+
+static void opcode_incdx(struct cpu *cpu) {
+    uint16_t res = opcode_add(cpu, opcode_reg8_to_reg16(cpu->reg.dx), 1);
+    opcode_set_reg16_val(cpu->reg.dx, res);
+}
+
+static void opcode_incbx(struct cpu *cpu) {
+    uint16_t res = opcode_add(cpu, opcode_reg8_to_reg16(cpu->reg.bx), 1);
+    opcode_set_reg16_val(cpu->reg.bx, res);
+}
+
+static void opcode_incsp(struct cpu *cpu) {
+    uint16_t res = opcode_add(cpu, cpu->reg.sp, 1);
+    cpu->reg.sp = res;
+}
+
+static void opcode_incbp(struct cpu *cpu) {
+    uint16_t res = opcode_add(cpu, cpu->reg.bp, 1);
+    cpu->reg.bp = res;
+}
+
+static void opcode_incsi(struct cpu *cpu) {
+    uint16_t res = opcode_add(cpu, cpu->reg.bp, 1);
+    cpu->reg.bp = res;
+}
+
+static void opcode_incdi(struct cpu *cpu) {
+    uint16_t res = opcode_add(cpu, cpu->reg.di, 1);
+    cpu->reg.di = res;
+}
+
+static void opcode_decax(struct cpu *cpu) {
+    uint16_t res = opcode_sub(cpu, opcode_reg8_to_reg16(cpu->reg.ax), 1);
+    opcode_set_reg16_val(cpu->reg.ax, res);
+}
+
+static void opcode_deccx(struct cpu *cpu) {
+    uint16_t res = opcode_sub(cpu, opcode_reg8_to_reg16(cpu->reg.cx), 1);
+    opcode_set_reg16_val(cpu->reg.cx, res);
+}
+
+static void opcode_decdx(struct cpu *cpu) {
+    uint16_t res = opcode_sub(cpu, opcode_reg8_to_reg16(cpu->reg.dx), 1);
+    opcode_set_reg16_val(cpu->reg.dx, res);
+}
+
+static void opcode_decbx(struct cpu *cpu) {
+    uint16_t res = opcode_sub(cpu, opcode_reg8_to_reg16(cpu->reg.bx), 1);
+    opcode_set_reg16_val(cpu->reg.bx, res);
+}
+
+static void opcode_decsp(struct cpu *cpu) {
+    uint16_t res = opcode_sub(cpu, cpu->reg.sp, 1);
+    cpu->reg.sp = res;
+}
+
+static void opcode_decbp(struct cpu *cpu) {
+    uint16_t res = opcode_sub(cpu, cpu->reg.bp, 1);
+    cpu->reg.bp = res;
+}
+
+static void opcode_decsi(struct cpu *cpu) {
+    uint16_t res = opcode_sub(cpu, cpu->reg.bp, 1);
+    cpu->reg.bp = res;
+}
+
+static void opcode_decdi(struct cpu *cpu) {
+    uint16_t res = opcode_sub(cpu, cpu->reg.di, 1);
+    cpu->reg.di = res;
+}
+
+// END OF OPCODE IMPLEMENTATIONS
+
+
+/*
+    addr8 = 8-bit address of I/O port
+    reg8 = AL = 0, CL = 1, DL = 2, BL = 3, AH =4, CH = 5, DH = 6, BH = 7
+    reg16 = AX = 0, CX =1, DX =2, BX =3, SP = 4, BP = 5, SI = 6, DI = 7
+    sreg = ES = 0, CS = 1, SS = 2, DS = 3
+    mem8 = memory byte (direct addressing only)
+    mem16 = memory word (direct addressing only)
+    r/m8 = reg8 or mem8
+    r/m16 = reg16 or mem16
+    imm8 = 8 bit immediate
+    imm16 = 16 bit immediate
+ */
 
 const struct opcode opcodes[256] = {
         {"ADD r/m8, r8", 2, opcode_addrm8},
@@ -574,38 +776,38 @@ const struct opcode opcodes[256] = {
         {"CMP ax, imm16", 2, NULL},
         {"", 0, NULL},
         {"AAS", 0, NULL},
-        {"INC ax", 0, NULL},
-        {"INC cx", 0, NULL},
-        {"INC dx", 0, NULL},
-        {"INC bx", 0, NULL},
-        {"INC sp", 0, NULL},
-        {"INC bp", 0, NULL},
-        {"INC si", 0, NULL},
-        {"INC di", 0, NULL},
-        {"DEC ax", 0, NULL},
-        {"DEC cx", 0, NULL},
-        {"DEC dx", 0, NULL},
-        {"DEC bx", 0, NULL},
-        {"DEC sp", 0, NULL},
-        {"DEC bp", 0, NULL},
-        {"DEC si", 0, NULL},
-        {"DEC di", 0, NULL},
-        {"PUSH ax", 0, NULL},
-        {"PUSH cx", 0, NULL},
-        {"PUSH dx", 0, NULL},
-        {"PUSH bx", 0, NULL},
-        {"PUSH sp", 0, NULL},
-        {"PUSH bp", 0, NULL},
-        {"PUSH si", 0, NULL},
-        {"PUSH di", 0, NULL},
-        {"POP ax", 0, NULL},
-        {"POP cx", 0, NULL},
-        {"POP dx", 0, NULL},
-        {"POP bx", 0, NULL},
-        {"POP sp", 0, NULL},
-        {"POP bp", 0, NULL},
-        {"POP si", 0, NULL},
-        {"POP di", 0, NULL},
+        {"INC ax", 0, opcode_incax},
+        {"INC cx", 0, opcode_inccx},
+        {"INC dx", 0, opcode_incdx},
+        {"INC bx", 0, opcode_incbx},
+        {"INC sp", 0, opcode_incsp},
+        {"INC bp", 0, opcode_incbp},
+        {"INC si", 0, opcode_incsi},
+        {"INC di", 0, opcode_incdi},
+        {"DEC ax", 0, opcode_decax},
+        {"DEC cx", 0, opcode_deccx},
+        {"DEC dx", 0, opcode_decdx},
+        {"DEC bx", 0, opcode_decbx},
+        {"DEC sp", 0, opcode_decsp},
+        {"DEC bp", 0, opcode_decbp},
+        {"DEC si", 0, opcode_decsi},
+        {"DEC di", 0, opcode_decdi},
+        {"PUSH ax", 0, opcode_pushax},
+        {"PUSH cx", 0, opcode_pushcx},
+        {"PUSH dx", 0, opcode_pushdx},
+        {"PUSH bx", 0, opcode_pushbx},
+        {"PUSH sp", 0, opcode_pushsp},
+        {"PUSH bp", 0, opcode_pushbp},
+        {"PUSH si", 0, opcode_pushsi},
+        {"PUSH di", 0, opcode_pushdi},
+        {"POP ax", 0, opcode_popax},
+        {"POP cx", 0, opcode_popcx},
+        {"POP dx", 0, opcode_popdx},
+        {"POP bx", 0, opcode_popbx},
+        {"POP sp", 0, opcode_popsp},
+        {"POP bp", 0, opcode_popbp},
+        {"POP si", 0, opcode_popsi},
+        {"POP di", 0, opcode_popdi},
         {"PUSHA", 0, NULL},
         {"POPA", 0, NULL},
         {"BOUND r16, m16", 3, NULL},
