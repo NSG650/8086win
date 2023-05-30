@@ -36,9 +36,11 @@ int main(void) {
         inc ax
         inc bx
         dec cx
+        add ax, cx
+        sub ax, bx
         hlt
     */
-    char code[] = "\x31\xd8\x31\xdb\x50\x59\x21\xd8\x40\x43\x49\xf4";
+    char code[] = "\x31\xd8\x31\xdb\x50\x59\x21\xd8\x40\x43\x49\x01\xc8\x29\xd8\xf4";
 
     memcpy(cpu.memory, code, sizeof(code) - 1);
 

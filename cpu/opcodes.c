@@ -470,6 +470,108 @@ static inline uint16_t opcode_sub(struct cpu *cpu, uint16_t a, uint16_t b) {
     return res;
 }
 
+static inline uint16_t opcode_add8(struct cpu *cpu, uint8_t a, uint8_t b) {
+    uint32_t res = a + b;
+
+    opcode_set_flags_based_on_result(cpu, res);
+
+    if (res & 0xFF00) { cpu->reg.flags |= CPU_FLAGS_CARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_CARRY);
+
+    if (((res ^ a) & (res ^ b) & 0x80) == 0x80) { cpu->reg.flags |= CPU_FLAGS_OVERFLOW ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+
+    if (((a ^ b ^ res) & 0x10) == 0x10) { cpu->reg.flags |= CPU_FLAGS_ACARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    return res;
+}
+
+static inline uint16_t opcode_adc(struct cpu *cpu, uint16_t a, uint16_t b) {
+    uint32_t res = a + b + (cpu->reg.flags & CPU_FLAGS_CARRY);
+
+    opcode_set_flags_based_on_result(cpu, res);
+
+    if (res & 0xFFFF0000) { cpu->reg.flags |= CPU_FLAGS_CARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_CARRY);
+
+    if (((res ^ a) & (res ^ b) & 0x8000) == 0x8000) { cpu->reg.flags |= CPU_FLAGS_OVERFLOW ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+
+    if (((a ^ b ^ res) & 0x10) == 0x10) { cpu->reg.flags |= CPU_FLAGS_ACARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    return res;
+}
+
+static inline uint16_t opcode_subb(struct cpu *cpu, uint16_t a, uint16_t b) {
+    uint32_t res = a - (b + (cpu->reg.flags & CPU_FLAGS_CARRY));
+
+    opcode_set_flags_based_on_result(cpu, res);
+
+    if (res & 0xFFFF0000) { cpu->reg.flags |= CPU_FLAGS_CARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_CARRY);
+
+    if (((res ^ a) & (a ^ b) & 0x8000) == 0x8000) { cpu->reg.flags |= CPU_FLAGS_OVERFLOW ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+
+    if (((a ^ b ^ res) & 0x10) == 0x10) { cpu->reg.flags |= CPU_FLAGS_ACARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    return res;
+}
+
+static inline uint16_t opcode_adc8(struct cpu *cpu, uint8_t a, uint8_t b) {
+    uint32_t res = a + b + (cpu->reg.flags & CPU_FLAGS_CARRY);
+
+    opcode_set_flags_based_on_result(cpu, res);
+
+    if (res & 0xFF00) { cpu->reg.flags |= CPU_FLAGS_CARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_CARRY);
+
+    if (((res ^ a) & (res ^ b) & 0x80) == 0x80) { cpu->reg.flags |= CPU_FLAGS_OVERFLOW ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+
+    if (((a ^ b ^ res) & 0x10) == 0x10) { cpu->reg.flags |= CPU_FLAGS_ACARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    return res;
+}
+
+static inline uint16_t opcode_subb8(struct cpu *cpu, uint8_t a, uint8_t b) {
+    uint32_t res = a - (b + (cpu->reg.flags & CPU_FLAGS_CARRY));
+
+    opcode_set_flags_based_on_result(cpu, res);
+
+    if (res & 0xFF00) { cpu->reg.flags |= CPU_FLAGS_CARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_CARRY);
+
+    if (((res ^ a) & (a ^ b) & 0x80) == 0x80) { cpu->reg.flags |= CPU_FLAGS_OVERFLOW ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+
+    if (((a ^ b ^ res) & 0x10) == 0x10) { cpu->reg.flags |= CPU_FLAGS_ACARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    return res;
+}
+
+static inline uint16_t opcode_sub8(struct cpu *cpu, uint8_t a, uint8_t b) {
+    uint32_t res = a - b;
+
+    opcode_set_flags_based_on_result(cpu, res);
+
+    if (res & 0xFF00) { cpu->reg.flags |= CPU_FLAGS_CARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_CARRY);
+
+    if (((res ^ a) & (a ^ b) & 0x80) == 0x80) { cpu->reg.flags |= CPU_FLAGS_OVERFLOW ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+
+    if (((a ^ b ^ res) & 0x10) == 0x10) { cpu->reg.flags |= CPU_FLAGS_ACARRY ; }
+    else cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    return res;
+}
+
 // START OF OPCODE IMPLEMENTATIONS
 
 static void opcode_hlt(struct cpu *cpu) {
@@ -484,6 +586,9 @@ static void opcode_xorrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t result = a ^ b;
     opcode_set_flags_based_on_result(cpu, result);
 
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
     opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
 
@@ -493,6 +598,9 @@ static void opcode_xorrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
 
     uint16_t result = a ^ b;
     opcode_set_flags_based_on_result(cpu, result);
+
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
 
     opcode_decode_mod_rm16l_and_write(cpu, op0, result);
 }
@@ -504,6 +612,9 @@ static void opcode_andrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t result = a & b;
     opcode_set_flags_based_on_result(cpu, result);
 
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
     opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
 
@@ -513,6 +624,9 @@ static void opcode_andrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
 
     uint16_t result = a & b;
     opcode_set_flags_based_on_result(cpu, result);
+
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
 
     opcode_decode_mod_rm16l_and_write(cpu, op0, result);
 }
@@ -524,6 +638,9 @@ static void opcode_orrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t result = a | b;
     opcode_set_flags_based_on_result(cpu, result);
 
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
     opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
 
@@ -534,6 +651,9 @@ static void opcode_orrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint16_t result = a | b;
     opcode_set_flags_based_on_result(cpu, result);
 
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
     opcode_decode_mod_rm16l_and_write(cpu, op0, result);
 }
 
@@ -541,7 +661,7 @@ static void opcode_addrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
     uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
 
-    uint16_t result = opcode_add(cpu, a, b);
+    uint8_t result = opcode_add8(cpu, a, b);
 
     opcode_decode_mod_rm8l_and_write(cpu, op0, result);
 }
@@ -552,7 +672,211 @@ static void opcode_addrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
 
     uint16_t result = opcode_add(cpu, a, b);
 
+    opcode_decode_mod_rm16l_and_write(cpu, op0, result);
+}
+
+static void opcode_adcrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = opcode_adc8(cpu, a, b);
+
     opcode_decode_mod_rm8l_and_write(cpu, op0, result);
+}
+
+static void opcode_adcrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = opcode_adc(cpu, a, b);
+
+    opcode_decode_mod_rm16l_and_write(cpu, op0, result);
+}
+
+static void opcode_subrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = opcode_sub8(cpu, a, b);
+
+    opcode_decode_mod_rm8l_and_write(cpu, op0, result);
+}
+
+static void opcode_subrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = opcode_sub(cpu, a, b);
+
+    opcode_decode_mod_rm16l_and_write(cpu, op0, result);
+}
+
+static void opcode_subbrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = opcode_subb8(cpu, a, b);
+
+    opcode_decode_mod_rm8l_and_write(cpu, op0, result);
+}
+
+static void opcode_subbrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = opcode_subb(cpu, a, b);
+
+    opcode_decode_mod_rm16l_and_write(cpu, op0, result);
+}
+
+static void opcode_xorr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = a ^ b;
+    opcode_set_flags_based_on_result(cpu, result);
+
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    opcode_decode_mod_rm8h_and_write(cpu, op0, result);
+}
+
+static void opcode_xorr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = a ^ b;
+    opcode_set_flags_based_on_result(cpu, result);
+
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    opcode_decode_mod_rm16h_and_write(cpu, op0, result);
+}
+
+static void opcode_andr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = a & b;
+    opcode_set_flags_based_on_result(cpu, result);
+
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    opcode_decode_mod_rm8h_and_write(cpu, op0, result);
+}
+
+static void opcode_andr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = a & b;
+    opcode_set_flags_based_on_result(cpu, result);
+
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    opcode_decode_mod_rm16h_and_write(cpu, op0, result);
+}
+
+static void opcode_orr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = a | b;
+    opcode_set_flags_based_on_result(cpu, result);
+
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    opcode_decode_mod_rm8h_and_write(cpu, op0, result);
+}
+
+static void opcode_orr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = a | b;
+    opcode_set_flags_based_on_result(cpu, result);
+
+    cpu->reg.flags &= ~(CPU_FLAGS_OVERFLOW);
+    cpu->reg.flags &= ~(CPU_FLAGS_ACARRY);
+
+    opcode_decode_mod_rm16h_and_write(cpu, op0, result);
+}
+
+static void opcode_addr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = opcode_add8(cpu, a, b);
+
+    opcode_decode_mod_rm8h_and_write(cpu, op0, result);
+}
+
+static void opcode_addr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = opcode_add(cpu, a, b);
+
+    opcode_decode_mod_rm16h_and_write(cpu, op0, result);
+}
+
+static void opcode_adcr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = opcode_adc8(cpu, a, b);
+
+    opcode_decode_mod_rm8h_and_write(cpu, op0, result);
+}
+
+static void opcode_adcr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = opcode_adc(cpu, a, b);
+
+    opcode_decode_mod_rm16h_and_write(cpu, op0, result);
+}
+
+static void opcode_subr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = opcode_sub8(cpu, a, b);
+
+    opcode_decode_mod_rm8h_and_write(cpu, op0, result);
+}
+
+static void opcode_subr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = opcode_sub(cpu, a, b);
+
+    opcode_decode_mod_rm16h_and_write(cpu, op0, result);
+}
+
+static void opcode_subbr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    uint8_t result = opcode_subb8(cpu, a, b);
+
+    opcode_decode_mod_rm8h_and_write(cpu, op0, result);
+}
+
+static void opcode_subbr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    uint16_t result = opcode_subb(cpu, a, b);
+
+    opcode_decode_mod_rm16h_and_write(cpu, op0, result);
 }
 
 static void opcode_pushax(struct cpu *cpu) {
@@ -714,66 +1038,66 @@ static void opcode_decdi(struct cpu *cpu) {
 const struct opcode opcodes[256] = {
         {"ADD r/m8, r8", 2, opcode_addrm8},
         {"ADD r/m16, r16", 2, opcode_addrm16},
-        {"ADD r8, r/m8", 2, NULL},
-        {"ADD r16, r/m16", 2, NULL},
-        {"ADD al, imm8", 1, NULL},
-        {"ADD ax, imm16", 2, NULL},
+        {"ADD r8, r/m8", 2, opcode_addr8},
+        {"ADD r16, r/m16", 2, opcode_addr16},
+        {"ADD al, imm8", 2, NULL},
+        {"ADD ax, imm16", 3, NULL},
         {"PUSH es", 0, NULL},
         {"POP es", 0, NULL},
         {"OR r/m8, r8", 2, opcode_orrm8},
         {"OR r/m16, r16", 2, opcode_orrm16},
-        {"OR r8, r/m8", 2, NULL},
-        {"OR r16, r/m16", 2, NULL},
-        {"OR al, imm8", 1, NULL},
-        {"OR ax, imm16", 2, NULL},
+        {"OR r8, r/m8", 2, opcode_orr8},
+        {"OR r16, r/m16", 2, opcode_orr8},
+        {"OR al, imm8", 2, NULL},
+        {"OR ax, imm16", 3, NULL},
         {"PUSH cs", 0, NULL},
         {"POP cs", 0, NULL},
-        {"ADC r/m8, r8", 2, NULL},
-        {"ADC r/m16, r16", 2, NULL},
-        {"ADC r8, r/m8", 2, NULL},
-        {"ADC r16, r/m16", 2, NULL},
-        {"ADC al, imm8", 1, NULL},
-        {"ADC ax, imm16", 2, NULL},
+        {"ADC r/m8, r8", 2, opcode_adcrm8},
+        {"ADC r/m16, r16", 2, opcode_adcrm16},
+        {"ADC r8, r/m8", 2, opcode_adcr8},
+        {"ADC r16, r/m16", 2, opcode_adcr16},
+        {"ADC al, imm8", 2, NULL},
+        {"ADC ax, imm16", 3, NULL},
         {"PUSH ss", 0, NULL},
         {"POP ss", 0, NULL},
-        {"SBB r/m8, r8", 2, NULL},
-        {"SBB r/m16, r16", 2, NULL},
-        {"SBB r8, r/m8", 2, NULL},
-        {"SBB r16, r/m16", 2, NULL},
-        {"SBB al, imm8", 1, NULL},
-        {"SBB ax, imm8", 1, NULL},
+        {"SBB r/m8, r8", 2, opcode_subbrm8},
+        {"SBB r/m16, r16", 2, opcode_subbrm16},
+        {"SBB r8, r/m8", 2, opcode_subbr8},
+        {"SBB r16, r/m16", 2, opcode_subbr16},
+        {"SBB al, imm8", 2, NULL},
+        {"SBB ax, imm16", 3, NULL},
         {"PUSH ds", 0, NULL},
         {"POP ds", 0, NULL},
         {"AND r/m8, r8", 2, opcode_andrm8},
         {"AND r/m16, r16", 2, opcode_andrm16},
-        {"AND r8, r/m8", 2, NULL},
-        {"AND r16, r/m16", 2, NULL},
-        {"AND al, imm8", 1, NULL},
-        {"AND ax, imm16", 2, NULL},
-        {"DAA", 0, NULL},
-        {"SUB r/m8, r8", 2, NULL},
-        {"SUB r/m16, r16", 2, NULL},
-        {"SUB r8, r/m8", 2, NULL},
-        {"SUB r16, r/m16", 2, NULL},
-        {"SUB al, imm8", 1, NULL},
-        {"SUB ax, imm16", 2, NULL},
+        {"AND r8, r/m8", 2, opcode_andr8},
+        {"AND r16, r/m16", 2, opcode_andr16},
+        {"AND al, imm8", 2, NULL},
+        {"AND ax, imm16", 3, NULL},
         {"", 0, NULL},
+        {"DAA", 0, NULL},
+        {"SUB r/m8, r8", 2, opcode_subrm8},
+        {"SUB r/m16, r16", 2,  opcode_subrm16},
+        {"SUB r8, r/m8", 2, opcode_subr8},
+        {"SUB r16, r/m16", 2, opcode_subr16},
+        {"SUB al, imm8", 2, NULL},
+        {"SUB ax, imm16", 3, NULL},
         {"", 0, NULL},
         {"DAS", 0, NULL},
         {"XOR r/m8, r8", 2, opcode_xorrm8},
         {"XOR r/m16, r16", 2, opcode_xorrm16},
-        {"XOR r8, r/m8", 2, NULL},
-        {"XOR r16, r/m16", 2, NULL},
-        {"XOR al, imm8", 1, NULL},
-        {"XOR ax, imm16", 2, NULL},
+        {"XOR r8, r/m8", 2, opcode_xorr8},
+        {"XOR r16, r/m16", 2, opcode_xorr16},
+        {"XOR al, imm8", 2, NULL},
+        {"XOR ax, imm16", 3, NULL},
         {"", 0, NULL},
         {"AAA", 0, NULL},
         {"CMP r/m8, r8", 2, NULL},
         {"CMP r/m16, r16", 2, NULL},
         {"CMP r8, r/m8", 2, NULL},
         {"CMP r16, r/m16", 2, NULL},
-        {"CMP al, imm8", 1, NULL},
-        {"CMP ax, imm16", 2, NULL},
+        {"CMP al, imm8", 2, NULL},
+        {"CMP ax, imm16", 3, NULL},
         {"", 0, NULL},
         {"AAS", 0, NULL},
         {"INC ax", 0, opcode_incax},
@@ -816,7 +1140,7 @@ const struct opcode opcodes[256] = {
         {"", 0, NULL},
         {"", 0, NULL},
         {"", 0, NULL},
-        {"PUSH imm16", 1, NULL},
+        {"PUSH imm16", 3, NULL},
         {"IMUL r16, r/m16, imm16", 4, NULL},
         {"PUSH imm8", 1, NULL},
         {"IMUL r16, r/m16, imm8", 3, NULL},
@@ -872,38 +1196,38 @@ const struct opcode opcodes[256] = {
         {"POPF", 0, NULL},
         {"SAHF", 0, NULL},
         {"LAHF", 0, NULL},
-        {"MOV al, moffs8", 1, NULL},
-        {"MOV ax, moffs16", 1, NULL},
-        {"MOV moffs8, al", 1, NULL},
-        {"MOV moffs16, ax", 1, NULL},
+        {"MOV al, moffs8", 2, NULL},
+        {"MOV ax, moffs16", 3, NULL},
+        {"MOV moffs8, al", 2, NULL},
+        {"MOV moffs16, ax", 3, NULL},
         {"MOVSB", 0, NULL},
         {"MOVSW", 0, NULL},
         {"CMPSB", 0, NULL},
         {"CMPSW", 0, NULL},
-        {"TEST al, imm8", 1, NULL},
-        {"TEST ax, imm16", 2, NULL},
+        {"TEST al, imm8", 2, NULL},
+        {"TEST ax, imm16", 3, NULL},
         {"STOSB", 0, NULL},
         {"STOSW", 0, NULL},
         {"LODSB", 0, NULL},
         {"LODSW", 0, NULL},
         {"SCASB", 0, NULL},
         {"SCASW", 0, NULL},
-        {"MOV al, imm8", 1, NULL},
-        {"MOV cl, imm8", 1, NULL},
-        {"MOV dl, imm8", 1, NULL},
-        {"MOV bl, imm8", 1, NULL},
-        {"MOV ah, imm8", 1, NULL},
-        {"MOV ch, imm8", 1, NULL},
-        {"MOV dh, imm8", 1, NULL},
-        {"MOV bh, imm8", 1, NULL},
-        {"MOV ax, imm16", 2, NULL},
-        {"MOV cx, imm16", 2, NULL},
-        {"MOV dx, imm16", 2, NULL},
-        {"MOV bx, imm16", 2, NULL},
-        {"MOV sp, imm16", 2, NULL},
-        {"MOV bp, imm16", 2, NULL},
-        {"MOV si, imm16", 2, NULL},
-        {"MOV di, imm16", 2, NULL},
+        {"MOV al, imm8", 2, NULL},
+        {"MOV cl, imm8", 2, NULL},
+        {"MOV dl, imm8", 2, NULL},
+        {"MOV bl, imm8", 2, NULL},
+        {"MOV ah, imm8", 2, NULL},
+        {"MOV ch, imm8", 2, NULL},
+        {"MOV dh, imm8", 2, NULL},
+        {"MOV bh, imm8", 2, NULL},
+        {"MOV ax, imm16", 3, NULL},
+        {"MOV cx, imm16", 3, NULL},
+        {"MOV dx, imm16", 3, NULL},
+        {"MOV bx, imm16", 3, NULL},
+        {"MOV sp, imm16", 3, NULL},
+        {"MOV bp, imm16", 3, NULL},
+        {"MOV si, imm16", 3, NULL},
+        {"MOV di, imm16", 3, NULL},
         {"GRP2 r/m8, imm8", 1, NULL},
         {"GRP2 r/m16, imm8", 1, NULL},
         {"RET imm16", 2, NULL},
@@ -940,10 +1264,10 @@ const struct opcode opcodes[256] = {
         {"LOOPZ rel8", 1, NULL},
         {"LOOP rel8", 1, NULL},
         {"JCXZ rel8", 1, NULL},
-        {"IN al, imm8", 1, NULL},
-        {"IN ax, imm8", 1, NULL},
-        {"OUT imm8, al", 1, NULL},
-        {"OUT imm8, ax", 1, NULL},
+        {"IN al, imm8", 2, NULL},
+        {"IN ax, imm8", 2, NULL},
+        {"OUT imm8, al", 2, NULL},
+        {"OUT imm8, ax", 2, NULL},
         {"CALL rel16", 1, NULL},
         {"JMP rel16", 1, NULL},
         {"JMP m16:16", 1, NULL},
@@ -958,16 +1282,16 @@ const struct opcode opcodes[256] = {
         {"", 0, NULL},
         {"HLT", 0, opcode_hlt},
         {"CMC", 0, NULL},
-        {"GRP3a r/m8", 1, NULL},
-        {"GRP3b r/m16", 1, NULL},
+        {"GRP3a r/m8", 2, NULL},
+        {"GRP3b r/m16", 2, NULL},
         {"CLC", 0, NULL},
         {"STC", 0, NULL},
         {"CLI", 0, NULL},
         {"STI", 0, NULL},
         {"CLD", 0, NULL},
         {"STD", 0, NULL},
-        {"GRP4 r/m8", 0, NULL},
-        {"GRP5 r/m16", 0, NULL},
+        {"GRP4 r/m8", 2, NULL},
+        {"GRP5 r/m16", 2, NULL},
 };
 
 void opcode_execute(struct cpu *cpu) {
