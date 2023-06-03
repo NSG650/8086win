@@ -711,6 +711,20 @@ static void opcode_subrm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     opcode_decode_mod_rm16l_and_write(cpu, op0, result);
 }
 
+static void opcode_cmprm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    opcode_sub8(cpu, a, b);
+}
+
+static void opcode_cmprm16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    opcode_sub(cpu, a, b);
+}
+
 static void opcode_subbrm8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
     uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
@@ -861,6 +875,20 @@ static void opcode_subr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     opcode_decode_mod_rm16h_and_write(cpu, op0, result);
 }
 
+static void opcode_cmpr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
+    uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
+
+    opcode_sub8(cpu, a, b);
+}
+
+static void opcode_cmpr16(struct cpu *cpu, uint8_t op0, uint8_t op1) {
+    uint16_t a = opcode_decode_mod_rm16l_and_read(cpu, op0);
+    uint16_t b = opcode_decode_mod_rm16h_and_read(cpu, op0);
+
+    opcode_sub(cpu, a, b);
+}
+
 static void opcode_subbr8(struct cpu *cpu, uint8_t op0, uint8_t op1) {
     uint8_t a = opcode_decode_mod_rm8l_and_read(cpu, op0);
     uint8_t b = opcode_decode_mod_rm8h_and_read(cpu, op0);
@@ -907,6 +935,22 @@ static void opcode_pushdi(struct cpu *cpu) {
     opcode_push(cpu,cpu->reg.di);
 }
 
+static void opcode_pushes(struct cpu *cpu) {
+    opcode_push(cpu,cpu->reg.es);
+}
+
+static void opcode_pushcs(struct cpu *cpu) {
+    opcode_push(cpu,cpu->reg.cs);
+}
+
+static void opcode_pushds(struct cpu *cpu) {
+    opcode_push(cpu,cpu->reg.ds);
+}
+
+static void opcode_pushss(struct cpu *cpu) {
+    opcode_push(cpu,cpu->reg.ss);
+}
+
 static void opcode_popax(struct cpu *cpu) {
     uint16_t t =  opcode_pop(cpu);
     opcode_set_reg16_val(cpu->reg.ax, t);
@@ -937,6 +981,20 @@ static void opcode_popsi(struct cpu *cpu) {
 }
 static void opcode_popdi(struct cpu *cpu) {
     cpu->reg.di = opcode_pop(cpu);
+}
+
+static void opcode_popes(struct cpu *cpu) {
+    cpu->reg.es = opcode_pop(cpu);
+}
+
+static void opcode_popcs(struct cpu *cpu) {
+    cpu->reg.cs = opcode_pop(cpu);
+}
+static void opcode_popds(struct cpu *cpu) {
+    cpu->reg.ds = opcode_pop(cpu);
+}
+static void opcode_popss(struct cpu *cpu) {
+    cpu->reg.ss = opcode_pop(cpu);
 }
 
 static void opcode_incax(struct cpu *cpu) {
@@ -1042,32 +1100,32 @@ const struct opcode opcodes[256] = {
         {"ADD r16, r/m16", 2, opcode_addr16},
         {"ADD al, imm8", 2, NULL},
         {"ADD ax, imm16", 3, NULL},
-        {"PUSH es", 0, NULL},
-        {"POP es", 0, NULL},
+        {"PUSH es", 0, opcode_pushes},
+        {"POP es", 0, opcode_popes},
         {"OR r/m8, r8", 2, opcode_orrm8},
         {"OR r/m16, r16", 2, opcode_orrm16},
         {"OR r8, r/m8", 2, opcode_orr8},
-        {"OR r16, r/m16", 2, opcode_orr8},
+        {"OR r16, r/m16", 2, opcode_orr16},
         {"OR al, imm8", 2, NULL},
         {"OR ax, imm16", 3, NULL},
-        {"PUSH cs", 0, NULL},
-        {"POP cs", 0, NULL},
+        {"PUSH cs", 0, opcode_pushcs},
+        {"POP cs", 0, opcode_popcs},
         {"ADC r/m8, r8", 2, opcode_adcrm8},
         {"ADC r/m16, r16", 2, opcode_adcrm16},
         {"ADC r8, r/m8", 2, opcode_adcr8},
         {"ADC r16, r/m16", 2, opcode_adcr16},
         {"ADC al, imm8", 2, NULL},
         {"ADC ax, imm16", 3, NULL},
-        {"PUSH ss", 0, NULL},
-        {"POP ss", 0, NULL},
+        {"PUSH ss", 0, opcode_pushss},
+        {"POP ss", 0, opcode_popss},
         {"SBB r/m8, r8", 2, opcode_subbrm8},
         {"SBB r/m16, r16", 2, opcode_subbrm16},
         {"SBB r8, r/m8", 2, opcode_subbr8},
         {"SBB r16, r/m16", 2, opcode_subbr16},
         {"SBB al, imm8", 2, NULL},
         {"SBB ax, imm16", 3, NULL},
-        {"PUSH ds", 0, NULL},
-        {"POP ds", 0, NULL},
+        {"PUSH ds", 0, opcode_pushds},
+        {"POP ds", 0, opcode_popds},
         {"AND r/m8, r8", 2, opcode_andrm8},
         {"AND r/m16, r16", 2, opcode_andrm16},
         {"AND r8, r/m8", 2, opcode_andr8},
@@ -1092,10 +1150,10 @@ const struct opcode opcodes[256] = {
         {"XOR ax, imm16", 3, NULL},
         {"", 0, NULL},
         {"AAA", 0, NULL},
-        {"CMP r/m8, r8", 2, NULL},
-        {"CMP r/m16, r16", 2, NULL},
-        {"CMP r8, r/m8", 2, NULL},
-        {"CMP r16, r/m16", 2, NULL},
+        {"CMP r/m8, r8", 2, opcode_cmprm8},
+        {"CMP r/m16, r16", 2, opcode_cmprm16},
+        {"CMP r8, r/m8", 2, opcode_cmpr8},
+        {"CMP r16, r/m16", 2, opcode_cmpr16},
         {"CMP al, imm8", 2, NULL},
         {"CMP ax, imm16", 3, NULL},
         {"", 0, NULL},
@@ -1339,4 +1397,12 @@ void opcode_execute(struct cpu *cpu) {
 
     // PhysicalAddress = Segment * 16 + Offset
     cpu->reg.ip32 = cpu->reg.cs * 16 + cpu->reg.ip;
+}
+
+size_t opcode_how_many_implemented(void) {
+    size_t count = 0;
+    for (size_t i = 0; i < 256; i++) {
+        if (opcodes[i].function) count++;
+    }
+    return count;
 }

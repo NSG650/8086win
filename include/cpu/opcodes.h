@@ -17,4 +17,6 @@ struct opcode {
 
 void opcode_execute(struct cpu *cpu);
 
+size_t opcode_how_many_implemented(void);
+
 #endif
